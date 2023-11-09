@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useOptimistic } from 'react';
 import io from 'socket.io-client';
+import { v4 } from 'uuid';
 
 let socket;
 const Home = ({ room }) => {
   const [input, setInput] = useState('');
   const [name, setName] = useState('');
+
   const [messages, setMessages] = useState([]);
 
   useEffect(() => {
@@ -36,14 +38,28 @@ const Home = ({ room }) => {
     // sent by the server when
     // someone else sends a message
     socket.on('update-input', (msg) => {
-      setMessages((messages) => [...messages, msg]);
+      // if the new message has the same id as one of the
+      // messages already in the state, then we're getting
+      // a message we already sent, so we need to remove
+      // our current message from the state
+      setMessages((messages) => [
+        ...messages.filter((message) => message.id !== msg.id),
+        msg,
+      ]);
     });
   };
 
   const onSubmit = (e) => {
     e.preventDefault();
-    socket.emit('input-change', { message: input, name: name });
-    setMessages((messages) => [...messages, { message: input, name: name }]);
+    // generate a unique id for this message
+    // so we can remove it from the state
+    // if we get it back from the server
+    const id = v4();
+    socket.emit('input-change', { message: input, name: name, id });
+    setMessages((messages) => [
+      ...messages,
+      { message: input, name: name, id, sending: true },
+    ]);
   };
 
   return (
@@ -65,10 +81,25 @@ const Home = ({ room }) => {
         </form>
       )}
       <ul>
-        {messages.map((msg, i) => (
-          <li key={i}>
+        {messages.map((msg) => (
+          <li key={msg.id}>
             <span className="text-gray-500">{msg.name}:</span>
             {msg.message}
+
+            {/* because we
+            use the same id for the message in the state
+            and the message from the server
+            we can use it to determine if the message
+            is sending or not
+            and display a message to the user
+            */}
+            <span
+              className={`${
+                msg.sending ? 'opacity-90' : 'opacity-0'
+              } transition-all duration-1000 ml-8`}
+            >
+              (sending...)
+            </span>
           </li>
         ))}
       </ul>
